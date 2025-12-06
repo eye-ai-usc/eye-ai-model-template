@@ -5,10 +5,10 @@ from deriva_ml import DerivaMLConfig
 
 # Create two alternative DerivaML configurations and store them into hydra-zen store.
 deriva_store = store(group="deriva_ml")
-deriva_store(DerivaMLConfig, name="default_deriva",
+deriva_store(DerivaMLConfig, name="localhost",
              hostname="localhost",
              catalog_id=2,
              use_minid=False)
-deriva_store(DerivaMLConfig, name="eye-ai",
+deriva_store(DerivaMLConfig, name="default_deriva",
              hostname="www.eye-ai.org",
              catalog_id="eye-ai")

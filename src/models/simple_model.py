@@ -9,12 +9,13 @@ as well as information about the execution environment, such as the working dire
 Additional parameters can be added to the function signature as needed.
 
 """
+from eye_ai import EyeAI
 from deriva_ml.execution import Execution
-from deriva_ml import MLAsset, ExecAssetType, DerivaML
+from deriva_ml import MLAsset, ExecAssetType
 
 
 def simple_model(learning_rate: float, epochs: int,
-                 ml_instance: DerivaML,
+                 ml_instance: EyeAI,
                  execution: Execution | None = None) -> None:
     """A  simple model function.  This should be replaced with the proper top level model for the script.
 
@@ -24,6 +25,7 @@ def simple_model(learning_rate: float, epochs: int,
     Args:
         learning_rate: Sample model parameter
         epochs:  Sample model parameter
+        ml_instance: An instance of the EyeAI class.
         execution: DerivaML execution object that will contain datasets and assets.
 
     Returns:
