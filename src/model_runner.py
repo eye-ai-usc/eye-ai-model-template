@@ -8,10 +8,11 @@ workflow to be created and call the domain specific version of DerivaML.
 import logging
 from typing import Any
 
-from deriva_ml import DerivaML, DerivaMLConfig, MLVocab, RID
+from deriva_ml import  DerivaMLConfig, RID
 from deriva_ml.dataset import DatasetSpec
 from deriva_ml.execution import ExecutionConfiguration, Workflow
 
+from eye_ai import EyeAI
 
 def run_model(
     deriva_ml: DerivaMLConfig,
@@ -46,7 +47,7 @@ def run_model(
     # Make a connection to the Deriva catalog.  You will need to change the class being used if you have a
     # derived catalog from DerivaML.  For example, in the case of an EyeAI catalog, you would use EyeAI instead of
     # DerivaML.
-    ml_instance = DerivaML.instantiate(deriva_ml)
+    ml_instance = EyeAI.instantiate(deriva_ml)
 
     # Create an execution instance.
     execution_config = ExecutionConfiguration(
