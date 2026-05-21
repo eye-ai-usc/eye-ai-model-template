@@ -584,7 +584,11 @@ By the time Phase 0 is done, the following is true:
   at run-start.
 - The dev-localhost MCP container is rebuilt against the current
   sibling versions; Claude Code's MCP server connection is restarted
-  and authenticated for the orchestrator session.
+  and the **OAuth flow has been completed** in the orchestrator's
+  Claude Code session (see step 3 of §6.2). `claude mcp list` reports
+  `dev-localhost: ... - ✓ Connected` and `deriva_ml_*` tools are
+  callable. Without this, Phase 0 part E (cross-channel verification)
+  and every persona's indirect-channel work is blocked.
 
 ### 6.2 Phase 0 steps (in order)
 
@@ -612,13 +616,74 @@ By the time Phase 0 is done, the following is true:
    Confirm versions match their `main` HEADs (or the run will pin to
    stale versions and the run is not reconstructable from sibling
    tags alone). Rebuild the dev-localhost MCP container against
-   those versions; restart Claude Code's MCP servers and confirm the
-   container is healthy AND that the orchestrator session's MCP OAuth
-   is current (an unauthenticated MCP server blocks the personas'
-   indirect-channel work — see the 2026-05-21 Curator finding 01 for
-   prior art).
+   those versions, restart Claude Code's MCP servers, and confirm
+   the container reports healthy in `claude mcp list` (status =
+   `Connected` or `Needs authentication`, NOT `Failed to connect`).
 
-3. **Phase 0 part A — create the catalog.** From the e2e worktree:
+3. **Authenticate the dev-localhost MCP server (OAuth).** The
+   `dev-localhost` MCP server uses a browser-based OAuth flow that
+   must be completed once per Claude Code session before its tools
+   become available. **This step blocks Phase 0 part E (cross-
+   channel verification) and the persona arcs' indirect-channel
+   work, so do it now, not later.**
+
+   Procedure:
+
+   a. Confirm the server is registered and its current state:
+      ```
+      claude mcp list
+      ```
+      Expected line:
+      `dev-localhost: https://localhost/mcp (HTTP) - ! Needs authentication`
+      If it says `Connected` already, skip to (d). If `Failed to
+      connect`, return to step 2.
+
+   b. Trigger the authorization URL:
+      ```
+      mcp__dev-localhost__authenticate
+      ```
+      The tool prints an `https://localhost/authn/authorize?...` URL
+      and a fallback path (`mcp__dev-localhost__complete_authentication`)
+      for the case where the redirect lands on a port nothing is
+      listening on.
+
+   c. Open the URL in a browser, sign in, and complete the consent
+      flow. The page redirects to
+      `http://localhost:8080/callback?code=...&state=...`. Two
+      outcomes:
+      - **Page loads cleanly.** The MCP server received the code,
+        exchanged it for a token, and the `deriva_ml_*` and other
+        tools become available automatically. The session emits a
+        notification listing the newly-available deferred tools.
+      - **Browser shows "connection error".** Nothing listened on
+        port 8080. Copy the full URL from the browser's address bar
+        and call `mcp__dev-localhost__complete_authentication` with
+        it to finish the handshake.
+
+   d. Sanity-check: a follow-up `claude mcp list` should now show
+      `dev-localhost: ... - ✓ Connected`. Confirm a representative
+      tool works:
+      ```
+      mcp__dev-localhost__get_catalog_info(hostname=localhost, catalog_id=1)
+      ```
+      (Any catalog id is fine — even a missing one returns a
+      meaningful error rather than an auth failure.)
+
+   Notes:
+
+   - The orchestrator session's OAuth token is **not inherited by
+     sub-agents spawned via the `Agent` tool**. The 2026-05-21 run
+     observed that sub-agents DID inherit auth (the dev-localhost
+     tools were immediately available to personas without re-auth);
+     verify this holds for your run by including a check in the
+     persona's startup instructions.
+   - If auth expires mid-run (long sessions), tool calls start
+     returning auth errors. Re-run (b) and (c).
+   - This step is per-Claude-Code-session, not per-catalog. If you
+     run a second e2e on the same day in the same session, you don't
+     need to re-auth.
+
+4. **Phase 0 part A — create the catalog.** From the e2e worktree (this was step 3 before the OAuth step was inserted):
    ```
    uv run load-cifar10 --hostname localhost \
        --create-catalog e2e-test-<YYYYMMDD> --phase schema
@@ -627,7 +692,7 @@ By the time Phase 0 is done, the following is true:
    numeric catalog id printed by the loader — every later step
    needs it.
 
-4. **Phase 0 part B — update `deriva.py`.** Edit
+5. **Phase 0 part B — update `deriva.py`.** Edit
    `src/configs/deriva.py` in the e2e worktree so the `default_deriva`
    entry has `hostname="localhost"` and `catalog_id=<new_id>`.
    Commit on `e2e-test/<YYYY-MM-DD>` with an `[E2E-DROP]` marker so
@@ -635,7 +700,7 @@ By the time Phase 0 is done, the following is true:
    `uv run deriva-ml-run` (and `deriva-ml-run-notebook`) in the e2e
    worktree default to the new catalog with no CLI overrides.
 
-5. **Phase 0 part C — load assets and datasets.** Re-invoke the
+6. **Phase 0 part C — load assets and datasets.** Re-invoke the
    loader against the now-existing catalog:
    ```
    uv run load-cifar10 --hostname localhost \
@@ -649,14 +714,14 @@ By the time Phase 0 is done, the following is true:
    2026-05-21 run found this guarantee imperfect — see Phase 0
    findings 04, 05.
 
-6. **Phase 0 part D — update `datasets.py`.** Edit
+7. **Phase 0 part D — update `datasets.py`.** Edit
    `src/configs/datasets.py` in the e2e worktree, replacing the empty
    placeholder lists with the dataset RIDs the loader produced.
    Discover them with `ml.find_datasets()` from a quick Python
    session against the new catalog. Commit on
    `e2e-test/<YYYY-MM-DD>` with an `[E2E-DROP]` marker.
 
-7. **Phase 0 part E — validate (cross-channel).** Run the same
+8. **Phase 0 part E — validate (cross-channel).** Run the same
    cross-channel verification (§3.4) that personas run — both via
    direct deriva-ml inspection AND via the MCP tools
    (`deriva_ml_list_datasets`, `deriva_ml_list_features`,
@@ -677,22 +742,22 @@ By the time Phase 0 is done, the following is true:
    test either aborts or proceeds with the finding documented and
    the Curator's success criteria adjusted accordingly. User decides.
 
-8. **Seed `experiment-decisions.md`** with the "Bootstrap" entry — a
+9. **Seed `experiment-decisions.md`** with the "Bootstrap" entry — a
    short note recording what was created in parts A-C, what the
    ground state looks like, the new catalog id, the
    `load-cifar10` invocations, and the sibling versions
    (commit SHAs or release tags) so the run is reconstructable.
 
-9. **Audit Claude Code skill registry.** Verify which skills are
+10. **Audit Claude Code skill registry.** Verify which skills are
    auto-fire vs slash-only by reading frontmatter; this is the
    ground state the personas will see. Mismatches against the
    personas' expected skill list go in `findings/setup/` as a
    pre-curator finding bucket.
 
-10. **Mode selection.** Ask the user — interactive or autonomous?
+11. **Mode selection.** Ask the user — interactive or autonomous?
     (See §3.1.)
 
-11. **Launch curator** in the shared e2e worktree with their persona
+12. **Launch curator** in the shared e2e worktree with their persona
     prompt. (Developer and Analyst launch later, sequentially, in the
     *same* worktree — there are no per-persona worktrees in this
     revision of the spec; see §3.5.)
