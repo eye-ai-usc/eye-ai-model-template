@@ -148,22 +148,41 @@ new variant beat the baseline?" sense), `maintain-experiment-notes`.
 **Goal:** Compare the developer's training runs (ranking by
 accuracy / AUC / etc.), produce an analysis notebook (ROC, confusion
 matrix, or similar), and write a short markdown report a reviewer
-could read in 5 minutes.
+could read in 5 minutes. As part of the analysis, exercise the
+**dataset denormalize** path (`deriva_ml_denormalize_dataset` via
+MCP and/or the corresponding deriva-ml Python API) to materialise a
+wide/flat view of the dataset the developer trained on and use it
+to drive the comparison — this is the test's deliberate exercise of
+the denormalize surface.
 
 **Primary skills/tools:** `compare-model-runs`, `run-notebook`,
 `execution-lifecycle` (for executing the notebook with provenance),
-`maintain-experiment-notes`.
+`dataset-lifecycle` (specifically the denormalize / wide-table
+section), `maintain-experiment-notes`.
 
 **Success criteria:**
 - A ranking of the developer's executions by at least one metric.
 - One executed analysis notebook (e.g., `notebooks/roc_analysis.ipynb`
   or a new one) producing plot asset(s) + a summary CSV asset.
+- **Denormalize exercised end-to-end:** the persona calls
+  `deriva_ml_denormalize_dataset` (or the deriva-ml Python equivalent)
+  on at least one of the developer's training/evaluation datasets,
+  uses the resulting wide table in the analysis (e.g., to join
+  predictions to ground-truth labels for ROC / confusion matrix),
+  and verifies the wide table's shape and contents against the
+  direct-channel dataset members (§3.4) — row count, label
+  distribution, and join keys must match. Disagreement is a finding
+  filed against the denormalize surface specifically.
 - A short markdown report under `docs/reports/` (created by this
   persona) summarizing the comparison, what's in the catalog now,
-  and any caveats.
+  any caveats, AND a brief subsection on the denormalize experience
+  — was it discoverable, did the output match expectations, did the
+  column naming / element-type ordering match what the persona
+  needed for the analysis.
 - `experiment-decisions.md` contains entries explaining: which runs
   were compared and why, what metric was chosen, how surprises
-  (if any) were interpreted.
+  (if any) were interpreted, and the rationale for the denormalize
+  call (which element type was treated as the "root", why).
 
 ---
 
@@ -280,7 +299,16 @@ reports.
 - **Analyst:** every plot, summary CSV, or notebook asset reported
   uploaded — visible via direct asset queries. Predictions used in
   the analysis match what the developer's executions actually
-  produced (cross-persona check).
+  produced (cross-persona check). **Denormalize output verified
+  against direct channel:** the wide table returned by
+  `deriva_ml_denormalize_dataset` is reconciled against the dataset's
+  members as seen via `ml.lookup_dataset(rid).list_dataset_members()`
+  and the underlying feature-value query — row count, the set of
+  member RIDs, and label distribution must agree. If the wide table
+  is missing rows, has duplicated rows, or carries labels that don't
+  match the ground-truth feature values, that's a high-severity
+  finding against the denormalize surface, filed even if the
+  analyst's downstream deliverables happen to still be producible.
 
 **What to do on disagreement:**
 
