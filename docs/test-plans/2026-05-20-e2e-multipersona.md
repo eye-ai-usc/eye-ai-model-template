@@ -78,9 +78,12 @@ reach for**, and **success criteria** (how we know they got there).
 - Domain schema populated by `load-cifar10` (Image table, vocabularies,
   built-in datasets, `Image_Classification` ground-truth feature
   values for labeled partitions).
-- `src/configs/dev/*_localhost.py` repointed at the new catalog/RIDs.
-- `experiment-decisions.md` either empty or with a single
-  "Bootstrap" entry from Phase 0 noting what was created and how.
+- `src/configs/deriva.py` `default_deriva` already points at the new
+  catalog id; `src/configs/datasets.py` already carries the
+  loader-produced RIDs. Both edits are `[E2E-DROP]` commits on the
+  shared `e2e-test/<YYYY-MM-DD>` branch (see §3.5).
+- `experiment-decisions.md` has a single "Bootstrap" entry from Phase
+  0 noting what was created and how.
 
 **Goal:** Audit the bootstrapped catalog, verify it's in shape for
 downstream personas, then *add value* on top of it: create at least
@@ -130,8 +133,9 @@ new variant beat the baseline?" sense), `maintain-experiment-notes`.
   predictions uploaded as `Execution_Asset` rows.
 - At least one multirun (e.g., `quick_vs_extended` or `lr_sweep`)
   completed; parent and child executions correctly linked.
-- New experiment config registered in `src/configs/dev/experiments.py`
-  if the developer needed one beyond the existing ones.
+- New experiment config registered in `src/configs/experiments.py`
+  (on the shared e2e branch) if the developer needed one beyond the
+  existing ones.
 - `experiment-decisions.md` contains entries explaining: which
   variants and why, which seed strategy, what success looked like.
 - Handoff summary: which executions the analyst should look at,
@@ -338,27 +342,43 @@ failures.
 
 ### 3.5 Multi-agent setup
 
-### 3.4 Multi-agent setup
-
 Each persona runs as its own Agent-tool invocation with a dedicated
-system prompt drawn from §2. Each gets its own git worktree branched
-from `main` of the model template (worktrees prevent the inter-agent
-file-stomping the May run hit). The catalog is shared.
+system prompt drawn from §2. **All three personas share a single git
+worktree** on a single dedicated e2e branch — they run sequentially in
+the same working tree, not in per-persona worktrees. The catalog is
+also shared.
 
 Branch / worktree convention:
 
 ```
-git worktree add ../deriva-ml-model-template-curator e2e-test/<YYYY-MM-DD>-curator
-git worktree add ../deriva-ml-model-template-developer e2e-test/<YYYY-MM-DD>-developer
-git worktree add ../deriva-ml-model-template-analyst e2e-test/<YYYY-MM-DD>-analyst
+git worktree add ../deriva-ml-model-template-e2e \
+    -b e2e-test/<YYYY-MM-DD>
 ```
 
-Each branch is cut from `main` at run-start. The curator's worktree
-is the one that touches `dev/*_localhost.py` for catalog repointing;
-the developer's worktree picks up those changes via merge from the
-curator's branch before starting. Same chain analyst-from-developer.
-This makes the handoff observable in git, not just in
-`experiment-decisions.md`.
+This worktree is created in Phase 0 step 0 (§6.2) before any persona
+runs. All persona work — config edits, `experiment-decisions.md`
+appends, findings under `findings/<persona>/`, helper scripts,
+commits with `[E2E-DROP]` markers — happens here, on this branch.
+
+**Why single-worktree, not worktree-per-persona.** The May 2026 spec
+chose worktree-per-persona to prevent file-stomping between
+concurrent agents. Personas in this run are sequential, not
+concurrent, so the file-stomping risk doesn't apply. The cost of
+per-persona worktrees was much higher: each persona's
+`experiment-decisions.md`, config edits, and findings lived in a
+separate working tree, and the orchestrator had to merge between
+branches to carry the handoff forward. That made the knowledge-
+transfer artifact — the whole point of §5 — implicit in the
+orchestrator's merging discipline rather than naturally available to
+the next persona. Single-worktree restores the handoff as the
+straightforward chain it should be: persona N writes,
+persona N+1 reads from the same files.
+
+**Concurrent variant (future).** If a future run ever wants to
+exercise concurrent personas (e.g., Curator on labeling while
+Developer trains on an earlier dataset version), reintroduce
+per-persona worktrees and treat each merge as an explicit
+synchronization point. Out of scope here.
 
 ---
 
@@ -544,49 +564,108 @@ spec calls it out so future readers don't relitigate the question:
 
 By the time Phase 0 is done, the following is true:
 
+- A single shared git worktree exists at
+  `../deriva-ml-model-template-e2e` on branch `e2e-test/<YYYY-MM-DD>`,
+  cut from `main` of this repo. All persona work happens here (§3.5).
 - A fresh catalog exists at `localhost` named `e2e-test-<YYYYMMDD>`.
 - The catalog has the cifar10 domain schema populated by `load-cifar10`
-  (Image table, vocabularies including `Image_Class`, the 13 built-in
+  (Image table, vocabularies including `Image_Class`, the built-in
   datasets, ground-truth `Image_Classification` feature values).
-- `src/configs/dev/{deriva,datasets,assets,roc_analysis}_localhost.py`
-  in each persona's worktree are repointed at the new catalog ID and
-  the new dataset RIDs.
-- The first entry in `experiment-decisions.md` is a single
-  "Bootstrap" note from Phase 0 recording catalog name, dataset RIDs,
-  the `load-cifar10` invocation that created them, and the sibling
-  versions of the platform stack at run-start.
+- `src/configs/deriva.py` in the e2e worktree has been edited so
+  `default_deriva` points at the new catalog id (a `[E2E-DROP]`
+  commit). `src/configs/datasets.py` has been edited with the
+  loader-produced RIDs (also `[E2E-DROP]`). The base config files are
+  edited *directly* — `configs/dev/` no longer exists in this
+  template; the dev-overlay pattern was retired with the 2026-05-21
+  rewrite.
+- `experiment-decisions.md` contains a single "Bootstrap" entry
+  recording catalog name, dataset RIDs, the `load-cifar10` invocation
+  that created them, and the sibling versions of the platform stack
+  at run-start.
 - The dev-localhost MCP container is rebuilt against the current
-  sibling versions; Claude Code's MCP server connection is restarted.
-- One git worktree exists per persona (curator, developer, analyst),
-  each branched from `main` of this repo.
+  sibling versions; Claude Code's MCP server connection is restarted
+  and authenticated for the orchestrator session.
 
 ### 6.2 Phase 0 steps (in order)
 
-1. **Choose date.** Pick the run date as `<YYYY-MM-DD>`. All branches,
-   catalog name, journal, and report use this. Refuse to proceed if a
-   prior catalog at the same name exists unless the user explicitly
-   says delete-and-reuse.
-2. **Verify clean state.** Model template `main` is at the latest
-   commit; no stale `e2e-test/*` branches conflict; prior test
-   catalogs (if any) are either kept intentionally or deleted with
-   user confirmation.
-3. **Refresh sibling versions.** `uv sync` in the workspace; verify
-   `deriva-ml`, `deriva-ml-mcp`, `deriva-mcp-core`, `deriva-skills`,
-   `deriva-ml-skills` versions all match their `main` HEADs; rebuild
-   the dev-localhost MCP container against those versions; restart
-   Claude Code's MCP servers and confirm the container is healthy.
-4. **Bootstrap the catalog.** Run:
+0. **Create the shared e2e worktree.** This is the first thing Phase
+   0 does — every later step writes into this worktree, not into
+   `main`. Pick the run date as `<YYYY-MM-DD>` (all later artifacts
+   key off this) and:
+   ```
+   git -C deriva-ml-model-template worktree add \
+       ../deriva-ml-model-template-e2e -b e2e-test/<YYYY-MM-DD>
+   ```
+   Refuse to proceed if a prior catalog at the target name exists
+   unless the user explicitly says delete-and-reuse. If an
+   `e2e-test/<YYYY-MM-DD>` branch already exists, abort or use a
+   suffixed date — never overwrite.
+
+1. **Verify clean state.** Model template `main` is at the latest
+   commit; no stale `e2e-test/*` worktrees or branches conflict;
+   prior test catalogs (if any) are either kept intentionally or
+   deleted with user confirmation.
+
+2. **Refresh sibling versions.** `uv sync --upgrade` inside the e2e
+   worktree to pick up the latest `deriva-ml`, `deriva-ml-mcp`,
+   `deriva-mcp-core`, `deriva-skills`, `deriva-ml-skills` versions.
+   Confirm versions match their `main` HEADs (or the run will pin to
+   stale versions and the run is not reconstructable from sibling
+   tags alone). Rebuild the dev-localhost MCP container against
+   those versions; restart Claude Code's MCP servers and confirm the
+   container is healthy AND that the orchestrator session's MCP OAuth
+   is current (an unauthenticated MCP server blocks the personas'
+   indirect-channel work — see the 2026-05-21 Curator finding 01 for
+   prior art).
+
+3. **Phase 0 part A — create the catalog.** From the e2e worktree:
    ```
    uv run load-cifar10 --hostname localhost \
-       --create-catalog e2e-test-<YYYYMMDD> --num-images 500
+       --create-catalog e2e-test-<YYYYMMDD> --phase schema
    ```
-   Then run the **same cross-channel verification** that personas run
-   (§3.4) — both via direct deriva-ml inspection AND via the MCP
-   tools (`deriva_ml_list_datasets`, `deriva_ml_list_features`,
+   This creates the catalog and the domain schema only. Capture the
+   numeric catalog id printed by the loader — every later step
+   needs it.
+
+4. **Phase 0 part B — update `deriva.py`.** Edit
+   `src/configs/deriva.py` in the e2e worktree so the `default_deriva`
+   entry has `hostname="localhost"` and `catalog_id=<new_id>`.
+   Commit on `e2e-test/<YYYY-MM-DD>` with an `[E2E-DROP]` marker so
+   the commit can be dropped from `main` at wrap-up. After this step,
+   `uv run deriva-ml-run` (and `deriva-ml-run-notebook`) in the e2e
+   worktree default to the new catalog with no CLI overrides.
+
+5. **Phase 0 part C — load assets and datasets.** Re-invoke the
+   loader against the now-existing catalog:
+   ```
+   uv run load-cifar10 --hostname localhost \
+       --catalog-id <new_id> --num-images 500 --phase images
+   uv run load-cifar10 --hostname localhost \
+       --catalog-id <new_id> --num-images 500 --phase datasets
+   ```
+   Run the phases separately (not `--phase all`) so a failure in
+   `datasets` doesn't require re-uploading the images. Each phase is
+   intended to be idempotent against partial state, though the
+   2026-05-21 run found this guarantee imperfect — see Phase 0
+   findings 04, 05.
+
+6. **Phase 0 part D — update `datasets.py`.** Edit
+   `src/configs/datasets.py` in the e2e worktree, replacing the empty
+   placeholder lists with the dataset RIDs the loader produced.
+   Discover them with `ml.find_datasets()` from a quick Python
+   session against the new catalog. Commit on
+   `e2e-test/<YYYY-MM-DD>` with an `[E2E-DROP]` marker.
+
+7. **Phase 0 part E — validate (cross-channel).** Run the same
+   cross-channel verification (§3.4) that personas run — both via
+   direct deriva-ml inspection AND via the MCP tools
+   (`deriva_ml_list_datasets`, `deriva_ml_list_features`,
    `deriva_ml_list_vocabulary_terms`). The two channels must agree
    on:
-   - Catalog exists at the expected name + a numeric catalog ID.
-   - 13 datasets present with the expected names.
+   - Catalog exists at the expected name + the numeric catalog id
+     recorded in `deriva.py`.
+   - The expected dataset hierarchy is present, and the RIDs recorded
+     in `datasets.py` resolve via both channels.
    - `Image_Classification` feature values are populated for the
      labeled partitions (count > 0).
    - Class distribution is balanced across all 10 CIFAR-10 classes
@@ -597,22 +676,26 @@ By the time Phase 0 is done, the following is true:
    fails any of the listed checks, that's also a Phase 0 finding. The
    test either aborts or proceeds with the finding documented and
    the Curator's success criteria adjusted accordingly. User decides.
-5. **Repoint dev configs.** Update `src/configs/dev/*_localhost.py`
-   in this checkout with the new catalog ID and dataset RIDs. Commit
-   on `main` of each per-persona worktree with the `[E2E-DROP]` marker
-   so the commit can be dropped at session end.
-6. **Seed `experiment-decisions.md`** with the "Bootstrap" entry — a
-   short note recording what was created in step 4 and what the
-   ground state looks like. Sibling versions (commit SHAs or release
-   tags) are part of this entry so the run is reconstructable.
-7. **Audit Claude Code skill registry.** Verify which skills are
+
+8. **Seed `experiment-decisions.md`** with the "Bootstrap" entry — a
+   short note recording what was created in parts A-C, what the
+   ground state looks like, the new catalog id, the
+   `load-cifar10` invocations, and the sibling versions
+   (commit SHAs or release tags) so the run is reconstructable.
+
+9. **Audit Claude Code skill registry.** Verify which skills are
    auto-fire vs slash-only by reading frontmatter; this is the
    ground state the personas will see. Mismatches against the
    personas' expected skill list go in `findings/setup/` as a
    pre-curator finding bucket.
-8. **Create worktrees.** One per persona, per §3.5.
-9. **Mode selection.** Ask the user — interactive or autonomous?
-10. **Launch curator** in their worktree with their persona prompt.
+
+10. **Mode selection.** Ask the user — interactive or autonomous?
+    (See §3.1.)
+
+11. **Launch curator** in the shared e2e worktree with their persona
+    prompt. (Developer and Analyst launch later, sequentially, in the
+    *same* worktree — there are no per-persona worktrees in this
+    revision of the spec; see §3.5.)
 
 ### 6.3 What's *not* Phase 0
 
@@ -641,12 +724,14 @@ When all three personas finish (or the user aborts):
    - Fix inline now via a fix-pass agent.
    - Defer (note in the report).
    - Discard (note in the report with reason).
-4. **Cherry-pick genuine template fixes** from persona branches
-   back to `main` of the model template. Test-mutation commits
-   on the persona branches (e.g., `dev/*_localhost.py` repointing)
-   are dropped.
+4. **Cherry-pick genuine template fixes** from the shared
+   `e2e-test/<YYYY-MM-DD>` branch back to `main` of the model
+   template. Test-mutation commits (anything tagged `[E2E-DROP]`,
+   e.g., the `deriva.py` and `datasets.py` repointing commits) are
+   dropped, not cherry-picked.
 5. **Worktree teardown** with explicit user confirmation: `git
-   worktree remove` each, `git branch -D` each.
+   worktree remove ../deriva-ml-model-template-e2e`, then
+   `git branch -D e2e-test/<YYYY-MM-DD>`.
 6. **Catalog disposition** with explicit user confirmation: delete
    or preserve.
 
@@ -692,12 +777,12 @@ itself is broken and that's its own finding worth investigating.
 | Question | Answer |
 |---|---|
 | Where does this spec live? | `docs/test-plans/2026-05-20-e2e-multipersona.md` |
-| Where do findings go? | `findings/<persona>/<NN>-<slug>.md` per worktree |
-| Where does the persona handoff happen? | `experiment-decisions.md` (project root) |
+| Where do findings go? | `findings/<persona>/<NN>-<slug>.md` in the shared e2e worktree |
+| Where does the persona handoff happen? | `experiment-decisions.md` (project root, in the shared e2e worktree) |
 | Who creates the catalog? | Phase 0 bootstrap (§6), via `load-cifar10` — *before* any persona runs |
 | What's the catalog name? | `e2e-test-<YYYYMMDD>` (chosen at run start) |
 | Cross-channel verification? | Each persona must verify, before declaring arc complete, that direct deriva-ml inspection of the catalog matches what the skills/MCP tools said happened. Disagreement is a finding (§3.4). |
 | Mode flag? | Interactive (checkpoint per persona) or Autonomous (final report only); chosen at start |
-| Branch naming? | `e2e-test/<YYYY-MM-DD>-<persona>`, branched from `main` |
+| Branch / worktree? | Single shared branch `e2e-test/<YYYY-MM-DD>` cut from `main`, checked out at `../deriva-ml-model-template-e2e`. All three personas run sequentially in this one worktree (see §3.5). |
 | Final artifact? | `findings/REPORT-<YYYY-MM-DD>.md` |
 | Who fixes bugs surfaced? | A fix-pass agent (post-run or between phases in interactive). Personas never fix mid-arc. |
