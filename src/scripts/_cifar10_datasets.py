@@ -53,7 +53,7 @@ SMALL_TEST_SIZE = 500
 
 # Column to stratify by for class-balanced splits — matches the
 # Image_Classification feature populated in stage 2b.
-STRATIFY_COLUMN = "Image_Classification.Image_Class"
+STRATIFY_COLUMN = "Execution_Image_Image_Classification.Image_Class"
 
 
 def stratified_sample_rids(
@@ -323,7 +323,8 @@ def create_dataset_hierarchy(ml: DerivaML, batch_size: int = 500) -> dict[str, s
             training_types=["Labeled"],
             testing_types=["Labeled"],
             element_table="Image",
-            include_tables=["Image_Classification"],
+            include_tables=["Image", "Execution_Image_Image_Classification"],
+            row_per="Execution_Image_Image_Classification",
             split_description="CIFAR-10 labeled split: stratified 80/20 from training images",
         )
         datasets["labeled_split"] = labeled.split.rid
@@ -342,7 +343,8 @@ def create_dataset_hierarchy(ml: DerivaML, batch_size: int = 500) -> dict[str, s
                 training_types=["Labeled"],
                 testing_types=["Labeled"],
                 element_table="Image",
-                include_tables=["Image_Classification"],
+                include_tables=["Image", "Execution_Image_Image_Classification"],
+                row_per="Execution_Image_Image_Classification",
                 split_description="Small CIFAR-10 labeled split: stratified 400/100 from training",
             )
         else:
@@ -355,7 +357,8 @@ def create_dataset_hierarchy(ml: DerivaML, batch_size: int = 500) -> dict[str, s
                 training_types=["Labeled"],
                 testing_types=["Labeled"],
                 element_table="Image",
-                include_tables=["Image_Classification"],
+                include_tables=["Image", "Execution_Image_Image_Classification"],
+                row_per="Execution_Image_Image_Classification",
                 split_description="Small CIFAR-10 labeled split: stratified from training",
             )
         datasets["small_labeled_split"] = small_labeled.split.rid
