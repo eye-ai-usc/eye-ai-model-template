@@ -33,6 +33,20 @@ deriva_store(
 
 deriva_store(
     DerivaMLConfig,
+    name="localhost_e2e_20260521",
+    hostname="localhost",
+    catalog_id=157,
+    use_minid=False,
+    zen_meta={
+        "description": (
+            "Localhost catalog 157 (e2e-test-20260521 schema, 500 CIFAR-10 images, "
+            "fresh end-to-end multi-persona test catalog, 2026-05-21)."
+        )
+    },
+)
+
+deriva_store(
+    DerivaMLConfig,
     name="localhost_46",
     hostname="localhost",
     catalog_id=46,
