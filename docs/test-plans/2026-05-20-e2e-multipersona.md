@@ -594,10 +594,113 @@ By the time Phase 0 is done, the following is true:
 
 ### 6.2 Phase 0 steps (in order)
 
-**Authentication first.** P0 begins by confirming the orchestrator
-can actually talk to the dev-localhost MCP server. If OAuth fails,
-no further P0 work is reachable — every cross-channel verification
-step and every persona's indirect-channel work depends on it.
+**Preflight first, then authentication.** P0 begins with a sync
+audit (step 0) and an MCP-auth handshake (step 1). Both are fail-
+fast gates: if the workspace is drifted or auth can't be
+established, no further P0 work is reachable.
+
+0. **Sync audit (preflight).** Verify the workspace is internally
+   consistent before doing any setup work. The 2026-05-21 e2e run
+   surfaced two distinct kinds of drift the orchestrator can't
+   recover from later: stale Claude Code plugins (skill docs were
+   one minor version behind the API they document) and a stale MCP
+   container image (a deriva-mcp-test image built against an older
+   deriva-ml). Both look healthy on inspection (plugin lists,
+   `docker ps`) yet ship the wrong code.
+
+   Run these checks in order; bail at the first failure rather
+   than papering over it:
+
+   a. **Repo state.** For each of `deriva-ml`, `deriva-mcp-core`,
+      `deriva-ml-mcp`, `deriva-skills`, `deriva-ml-skills`,
+      `deriva-ml-model-template`:
+      ```
+      git -C <repo> fetch --prune origin
+      git -C <repo> status -b --short      # expect: clean, == origin/main
+      git -C <repo> log --oneline -1 main  # note the SHA
+      ```
+      No repo should have uncommitted changes or be ahead/behind
+      its origin/main.
+
+   b. **Stale local branches.** For each repo above, list local
+      branches whose upstream is `gone` (PR was merged + branch
+      deleted on GitHub). They are harmless but accumulate, and
+      `git fetch --prune` will mark them:
+      ```
+      git -C <repo> for-each-ref --format='%(refname:short) %(upstream:track)' refs/heads \
+        | awk '$2 ~ /gone/ {print $1}'
+      ```
+      Delete any whose tip is also in main (`git branch -d`).
+
+   c. **Lockfile freshness.** In `deriva-ml-mcp`,
+      `deriva-ml-model-template`, and `deriva-ml-skills`:
+      ```
+      uv sync --upgrade-package deriva-ml
+      uv sync --upgrade-package deriva   # deriva-py
+      ```
+      If either of these produces a diff to `uv.lock`, commit it as
+      `chore(deps): sync ...` and push before proceeding. The run
+      becomes unreconstructable if the lockfile drifts mid-test.
+
+   d. **Local venv sanity.** From the model-template:
+      ```
+      uv run python -c "
+      import deriva_ml, inspect
+      from deriva_ml.dataset.split import split_dataset
+      print(deriva_ml.__version__)
+      print('execution param:', 'execution' in inspect.signature(split_dataset).parameters)
+      "
+      ```
+      Version should match the lockfile pin; the `execution` param
+      check is a fast sentinel that catches "split_dataset signature
+      drift" — a stand-in for "is the venv on the new contract".
+
+   e. **Claude Code plugin freshness.** The skill docs that
+      Curator / Developer / Analyst will lean on must match the
+      API they describe.
+      ```
+      claude plugin list | grep deriva
+      ```
+      For each `deriva*@deriva-plugins` entry, compare its version
+      against the latest tag on origin:
+      ```
+      git -C deriva-skills    tag --list | sort -V | tail -1
+      git -C deriva-ml-skills tag --list | sort -V | tail -1
+      ```
+      If installed < latest tag, run
+      `claude plugin update <name>@deriva-plugins` and restart
+      Claude Code before continuing.
+
+   f. **MCP container freshness.** This is the trap. The compose
+      file declares two services that build distinct images
+      (`deriva-mcp` and `deriva-mcp-test` — the latter extends the
+      former but yields a *separate* tag), and rebuilding one
+      does NOT rebuild the other. Verify the actual running test
+      image:
+      ```
+      docker exec deriva-mcp-test python -c '
+      import deriva_ml, importlib.metadata as md
+      print("deriva-ml:    ", deriva_ml.__version__)
+      print("deriva-ml-mcp:", md.version("deriva-ml-mcp"))
+      '
+      ```
+      Both versions must match the SHAs from step (a). If either
+      lags:
+      ```
+      cd deriva-docker/deriva
+      docker compose --env-file ~/.deriva-docker/env/localhost.env \
+                     build --no-cache deriva-mcp-test
+      docker compose --env-file ~/.deriva-docker/env/localhost.env \
+                     up -d --force-recreate deriva-mcp-test
+      ```
+      Re-run the version check before proceeding to step 1. **Do
+      not rely on `--no-cache deriva-mcp` to rebuild the test
+      image** — they are separate tags. Always name the
+      `-test` service explicitly.
+
+   If any sub-check fails, fix it and re-run from (a). The cost of
+   bailing here is minutes; the cost of running a multipersona
+   arc against drifted siblings is the entire run.
 
 1. **Authenticate the dev-localhost MCP server (OAuth).** The
    `dev-localhost` MCP server uses a browser-based OAuth flow that
