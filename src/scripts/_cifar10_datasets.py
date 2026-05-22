@@ -312,32 +312,39 @@ def create_dataset_hierarchy(ml: DerivaML, batch_size: int = 500) -> dict[str, s
     # balanced class distribution — without this, the 400/100 small
     # split inherited the source class skew and ended up bird/ship-only
     # at --num-images 500 (#13).
+    #
+    # ``split_dataset`` runs inside an Execution the caller has already
+    # opened: deriva-ml never invents workflow provenance, so this
+    # script (which is the caller) is responsible for registering the
+    # workflow and opening an execution that says "the bytes in this
+    # script decided to do these splits." We reuse a single workflow
+    # and a single execution across both labeled splits so the lineage
+    # is coherent (one Execution row, two Split datasets nested under
+    # the source Training dataset).
     if train_rids:
-        logger.info("Creating Labeled_Split (80/20 of training)...")
-        labeled = split_dataset(
-            ml,
-            datasets["training"],
-            test_size=0.2,
-            seed=42,
-            stratify_by_column=STRATIFY_COLUMN,
-            training_types=["Labeled"],
-            testing_types=["Labeled"],
-            element_table="Image",
-            include_tables=["Image", "Execution_Image_Image_Classification"],
-            row_per="Execution_Image_Image_Classification",
-            split_description="CIFAR-10 labeled split: stratified 80/20 from training images",
+        split_workflow = ml.create_workflow(
+            name="CIFAR-10 Labeled Split",
+            workflow_type="Dataset_Split",
+            description=(
+                "Stratified labeled splits from the CIFAR-10 training set; "
+                "produces Labeled_Split and Small_Labeled_Split."
+            ),
         )
-        datasets["labeled_split"] = labeled.split.rid
-        datasets["labeled_training"] = labeled.training.rid
-        datasets["labeled_testing"] = labeled.testing.rid
-
-        logger.info("Creating Small_Labeled_Split...")
-        if len(train_rids) >= 500:
-            small_labeled = split_dataset(
+        with ml.create_execution(
+            ExecutionConfiguration(
+                workflow=split_workflow,
+                description="Create Labeled_Split and Small_Labeled_Split from the training set",
+            )
+        ) as split_exe:
+            logger.info(
+                "Creating Labeled_Split (80/20 of training) in execution %s...",
+                split_exe.execution_rid,
+            )
+            labeled = split_dataset(
                 ml,
                 datasets["training"],
-                test_size=100,
-                train_size=400,
+                split_exe,
+                test_size=0.2,
                 seed=42,
                 stratify_by_column=STRATIFY_COLUMN,
                 training_types=["Labeled"],
@@ -345,25 +352,49 @@ def create_dataset_hierarchy(ml: DerivaML, batch_size: int = 500) -> dict[str, s
                 element_table="Image",
                 include_tables=["Image", "Execution_Image_Image_Classification"],
                 row_per="Execution_Image_Image_Classification",
-                split_description="Small CIFAR-10 labeled split: stratified 400/100 from training",
+                split_description="CIFAR-10 labeled split: stratified 80/20 from training images",
             )
-        else:
-            small_labeled = split_dataset(
-                ml,
-                datasets["training"],
-                test_size=0.2,
-                seed=123,
-                stratify_by_column=STRATIFY_COLUMN,
-                training_types=["Labeled"],
-                testing_types=["Labeled"],
-                element_table="Image",
-                include_tables=["Image", "Execution_Image_Image_Classification"],
-                row_per="Execution_Image_Image_Classification",
-                split_description="Small CIFAR-10 labeled split: stratified from training",
-            )
-        datasets["small_labeled_split"] = small_labeled.split.rid
-        datasets["small_labeled_training"] = small_labeled.training.rid
-        datasets["small_labeled_testing"] = small_labeled.testing.rid
+            datasets["labeled_split"] = labeled.split.rid
+            datasets["labeled_training"] = labeled.training.rid
+            datasets["labeled_testing"] = labeled.testing.rid
+
+            logger.info("Creating Small_Labeled_Split...")
+            if len(train_rids) >= 500:
+                small_labeled = split_dataset(
+                    ml,
+                    datasets["training"],
+                    split_exe,
+                    test_size=100,
+                    train_size=400,
+                    seed=42,
+                    stratify_by_column=STRATIFY_COLUMN,
+                    training_types=["Labeled"],
+                    testing_types=["Labeled"],
+                    element_table="Image",
+                    include_tables=["Image", "Execution_Image_Image_Classification"],
+                    row_per="Execution_Image_Image_Classification",
+                    split_description="Small CIFAR-10 labeled split: stratified 400/100 from training",
+                )
+            else:
+                small_labeled = split_dataset(
+                    ml,
+                    datasets["training"],
+                    split_exe,
+                    test_size=0.2,
+                    seed=123,
+                    stratify_by_column=STRATIFY_COLUMN,
+                    training_types=["Labeled"],
+                    testing_types=["Labeled"],
+                    element_table="Image",
+                    include_tables=["Image", "Execution_Image_Image_Classification"],
+                    row_per="Execution_Image_Image_Classification",
+                    split_description="Small CIFAR-10 labeled split: stratified from training",
+                )
+            datasets["small_labeled_split"] = small_labeled.split.rid
+            datasets["small_labeled_training"] = small_labeled.training.rid
+            datasets["small_labeled_testing"] = small_labeled.testing.rid
+
+        split_exe.upload_execution_outputs(clean_folder=True)
 
     return datasets
 

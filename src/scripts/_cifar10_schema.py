@@ -291,6 +291,18 @@ def setup_workflow_types(ml: DerivaML) -> None:
             description="Jupyter notebook that computes ROC curves and AUC scores for classification experiments",
         )
 
+    if "Dataset_Split" not in existing_types:
+        logger.info("Creating Dataset_Split workflow type...")
+        ml.add_term(
+            table="Workflow_Type",
+            term_name="Dataset_Split",
+            description=(
+                "Workflow that partitions an existing dataset into train/test "
+                "(and optionally validation) child datasets via "
+                "deriva_ml.dataset.split.split_dataset"
+            ),
+        )
+
 
 def setup_dataset_types(ml: DerivaML) -> None:
     """Ensure required dataset types exist in Dataset_Type vocabulary.
