@@ -698,9 +698,55 @@ established, no further P0 work is reachable.
       image** — they are separate tags. Always name the
       `-test` service explicitly.
 
-   If any sub-check fails, fix it and re-run from (a). The cost of
-   bailing here is minutes; the cost of running a multipersona
-   arc against drifted siblings is the entire run.
+   g. **`main` is at template state.** The persona arcs start from
+      a worktree cut from `main`, so `main` itself must be in its
+      pristine, no-prior-run state. Every previous multipersona
+      run produced `[E2E-DROP]` commits that mutate
+      `src/configs/deriva.py`, `src/configs/datasets.py`, and
+      `experiment-decisions.md`. Wrap-up step 4 of the test plan
+      drops those commits when cherry-picking back to `main`, but
+      the bookkeeping is easy to get wrong, and a poisoned `main`
+      means the *next* multipersona run inherits last run's
+      catalog id, dataset RIDs, and Bootstrap note. The persona
+      cannot detect the drift — they just see a stale catalog ref
+      in the config they're "starting fresh" with.
+
+      Check each file is at its template state:
+
+      - `src/configs/deriva.py` should have `catalog_id=0` in
+        `default_deriva` (the placeholder). Anything else means a
+        prior E2E-DROP leaked through.
+      - `src/configs/datasets.py` should have empty placeholder
+        list literals for every dataset group, not RID strings.
+        The docstring at the top of the file calls itself out as
+        "intentionally empty by default."
+      - `experiment-decisions.md` should be the template header
+        only — three short lines of intro + a horizontal-rule
+        separator + nothing else. No "Bootstrap" entry, no
+        per-persona decision logs, no model-tuning notes.
+
+      Fast cross-check (ignores commented-out example lines in
+      `datasets.py`, which legitimately contain RID strings inside
+      `# DatasetSpecConfig(rid="..."` examples):
+      ```
+      grep -E "^[^#]*catalog_id=[1-9]" src/configs/deriva.py \
+        && echo "FAIL: deriva.py has a real catalog_id"
+      grep -E "^[^#]*rid=\"[0-9]" src/configs/datasets.py \
+        && echo "FAIL: datasets.py has RIDs filled in"
+      [ "$(wc -l < experiment-decisions.md)" -gt 7 ] \
+        && echo "FAIL: experiment-decisions.md is non-template"
+      ```
+
+      If any check fails: `git log --oneline -- <path>` to find
+      the offending E2E-DROP commit, then `git revert <sha>` (or
+      `git restore --source=<known-good-sha> <path>` if reverting
+      is messy because of subsequent template-evolution commits)
+      and push to origin/main *before* proceeding.
+
+   If any sub-check (a-g) fails, fix it and re-run from (a). The
+   cost of bailing here is minutes; the cost of running a
+   multipersona arc against drifted siblings or a poisoned `main`
+   is the entire run.
 
 1. **Authenticate the dev-localhost MCP server (OAuth).** The
    `dev-localhost` MCP server uses a browser-based OAuth flow that
@@ -789,6 +835,24 @@ established, no further P0 work is reachable.
    unless the user explicitly says delete-and-reuse. If an
    `e2e-test/<YYYY-MM-DD>` branch already exists, abort or use a
    suffixed date — never overwrite.
+
+   Immediately re-verify the *worktree's* template-state files
+   match `main` (step 0(g) checked `main` itself; this checks the
+   worktree the personas will actually inhabit):
+   ```
+   cd ../deriva-ml-model-template-e2e
+   grep -E "^[^#]*catalog_id=[1-9]" src/configs/deriva.py \
+     && echo "FAIL: deriva.py is non-template in the worktree"
+   grep -E "^[^#]*rid=\"[0-9]" src/configs/datasets.py \
+     && echo "FAIL: datasets.py has RIDs in the worktree"
+   [ "$(wc -l < experiment-decisions.md)" -gt 7 ] \
+     && echo "FAIL: experiment-decisions.md is non-template in the worktree"
+   ```
+   None of the FAIL lines should print. If any does, something
+   between `main`'s tip and the new branch's tip is wrong —
+   abort and inspect (`git diff main..e2e-test/<YYYY-MM-DD> -- \
+   src/configs/ experiment-decisions.md` will be empty for a
+   clean cut).
 
 3. **Verify clean state.** Model template `main` is at the latest
    commit; no stale `e2e-test/*` worktrees or branches conflict;
