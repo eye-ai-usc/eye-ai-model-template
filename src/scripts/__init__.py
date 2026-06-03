@@ -1,4 +1,4 @@
-"""Scripts for deriva-ml-model-template.
+"""Scripts for eye-ai-model-template.
 
 This package contains executable scripts for data loading and model operations.
 """
