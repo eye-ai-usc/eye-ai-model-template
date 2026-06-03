@@ -976,8 +976,8 @@ dependencies = [
 
 [[package]]
 name = "deriva-ml"
-version = "1.43.2"
-source = { git = "https://github.com/informatics-isi-edu/deriva-ml#941b52248704ea41890f3f8b4cebbb383bb1ad46" }
+version = "1.45.0"
+source = { git = "https://github.com/informatics-isi-edu/deriva-ml?tag=v1.45.0#5158d8f93043011f23b7ac2c0275479aadeb2a14" }
 dependencies = [
     { name = "bdbag" },
     { name = "bump-my-version" },
@@ -1022,10 +1022,9 @@ wheels = [
 
 [[package]]
 name = "eye-ai"
-version = "1.5.3"
-source = { git = "https://github.com/eye-ai-usc/eye-ai-ml.git#949c6860228d3f6f49afc690cbd9d7e7226fb61e" }
+version = "1.6.0"
+source = { git = "https://github.com/eye-ai-usc/eye-ai-ml.git#c63b11231c7f162e031812eca62ff779876d050a" }
 dependencies = [
-    { name = "deriva" },
     { name = "deriva-ml" },
     { name = "ipykernel" },
     { name = "matplotlib" },
