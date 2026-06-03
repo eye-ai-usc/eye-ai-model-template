@@ -1023,7 +1023,7 @@ wheels = [
 [[package]]
 name = "eye-ai"
 version = "1.5.3"
-source = { git = "https://github.com/eye-ai-usc/eye-ai-ml?tag=v1.5.3#949c6860228d3f6f49afc690cbd9d7e7226fb61e" }
+source = { git = "https://github.com/eye-ai-usc/eye-ai-ml.git#949c6860228d3f6f49afc690cbd9d7e7226fb61e" }
 dependencies = [
     { name = "deriva" },
     { name = "deriva-ml" },
@@ -1081,7 +1081,7 @@ torch = [
 
 [package.metadata]
 requires-dist = [
-    { name = "eye-ai", git = "https://github.com/eye-ai-usc/eye-ai-ml?tag=v1.5.3" },
+    { name = "eye-ai", git = "https://github.com/eye-ai-usc/eye-ai-ml.git" },
     { name = "ipykernel", specifier = ">=7.1.0" },
     { name = "matplotlib" },
     { name = "notebook", specifier = ">=7.4.7" },

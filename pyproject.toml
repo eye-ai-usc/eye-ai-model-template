@@ -13,10 +13,10 @@ keywords = ["deriva-ml", "eye-ai"]
 
 dependencies = [
     # eye-ai is the EyeAI domain class derived from deriva-ml. It re-exports
-    # and pins a compatible deriva-ml; pin eye-ai to a tag that ships a
-    # deriva-ml >=1.42 (v1.42.0 adds the ``subsample()`` primitive and the
-    # ``Split_Partition`` Dataset_Type tag — deriva-ml PR #275 — which the
-    # CIFAR-10 hierarchy below relies on).
+    # and depends on a compatible deriva-ml >=1.42 (v1.42.0 adds the
+    # ``subsample()`` primitive and the ``Split_Partition`` Dataset_Type tag —
+    # deriva-ml PR #275 — which the CIFAR-10 hierarchy below relies on). The
+    # source pin lives in [tool.uv.sources] below.
     "eye-ai",
     "notebook>=7.4.7",
     "torchvision",
@@ -76,14 +76,11 @@ url = "https://download.pytorch.org/whl/cu124"
 explicit = true
 
 [tool.uv.sources]
-eye-ai = { git = "https://github.com/eye-ai-usc/eye-ai-ml", tag = "v1.5.3" }
-# eye-ai v1.5.3 declares deriva-ml from git main; pull it from the same source
-# so the template's ``deriva-ml>=1.42`` constraint resolves against main HEAD.
+# eye-ai tracks its default branch; it declares deriva-ml from git main, so we
+# pull deriva-ml from the same source to satisfy the template's deriva-ml>=1.42
+# requirement (subsample / Split_Partition — deriva-ml PR #275).
 deriva-ml = { git = "https://github.com/informatics-isi-edu/deriva-ml.git" }
-   # torch = [
-   #     { index = "pytorch-cpu", marker = "(sys_platform == 'darwin' and platform_machine == 'arm64') or (platform_machine != 'x86_64' and sys_platform == 'Linux')"},
-   #     { index = "pytorch-cuda", marker = "sys_platform == 'Linux' and platform_machine == 'x86_64'"}
-   # ]
+eye-ai = { git = "https://github.com/eye-ai-usc/eye-ai-ml.git" }
 
 [tool.setuptools_scm]
 version_scheme = "post-release"
